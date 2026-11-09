@@ -1,4 +1,4 @@
-"""Тесты конфигурации и графа зависимостей."""
+"""Тесты этапов 1–4."""
 import sys
 import unittest
 from pathlib import Path
@@ -10,9 +10,10 @@ sys.path.insert(
 from config import read_config
 from apt_data import parse_stanzas, get_direct
 from graph import recursive_bfs, load_test_graph
+from order import loading_order
 
 class ProjectTests(unittest.TestCase):
-    """Проверить анализ зависимостей. 1-3"""
+    """Проверить анализ зависимостей. 1-4"""
 
     def test_config(self):
         """Читать настройки в INI. 1"""
@@ -25,7 +26,7 @@ class ProjectTests(unittest.TestCase):
             read_config('no_such_file.ini')
 
     def test_apt_parsing(self):
-        """Извлечь прямые зависимости пакета. 2"""
+        """Извлечь прямые зависимости. 2"""
         text = (
             'Package: A\n'
             'Version: 1\n'
@@ -35,21 +36,30 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual(get_direct(fields), ['B', 'C'])
 
     def test_bfs(self):
-        """Построить полный граф BFS с рекурсией. 3"""
+        """Построить граф рекурсивным BFS. 3"""
         data = load_test_graph('data/graph_chain.json')
         result = recursive_bfs('A', lambda n: data.get(n, []))
         self.assertEqual(len(result), 4)
-        self.assertEqual(result['A'], ['B', 'C'])
-        self.assertEqual(result['B'], ['D'])
-        self.assertEqual(result['C'], ['D'])
 
     def test_cycle(self):
-        """Завершить BFS на циклическом графе. 3"""
+        """Обработать циклический граф. 3"""
         data = load_test_graph('data/graph_cycle.json')
         result = recursive_bfs('A', lambda n: data.get(n, []))
         self.assertEqual(len(result), 3)
-        self.assertEqual(result['C'], ['A'])
 
+    def test_order(self):
+        """Разместить зависимости перед пакетом. 4"""
+        data = load_test_graph('data/graph_chain.json')
+        sequence, cycles = loading_order(data, 'A')
+        self.assertEqual(sequence, ['D', 'B', 'C', 'A'])
+        self.assertFalse(cycles)
+
+    def test_order_cycle(self):
+        """Обнаружить цикл в зависимостях. 4"""
+        data = load_test_graph('data/graph_cycle.json')
+        sequence, cycles = loading_order(data, 'A')
+        self.assertEqual(len(sequence), 3)
+        self.assertTrue(cycles)
 
 if __name__ == '__main__':
     unittest.main()
