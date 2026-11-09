@@ -2,13 +2,10 @@
 import argparse
 import sys
 
+from apt_data import download_index, parse_stanzas
 from config import read_config
-from apt_data import (
-    download_index,
-    get_direct,
-    parse_stanzas,
-    select_version,
-)
+from graph import apt_provider, load_test_graph, recursive_bfs
+
 
 def parse_cli(argv=None):
     """Прочитать путь к INI-файлу. 1"""
@@ -18,27 +15,29 @@ def parse_cli(argv=None):
     parser.add_argument('--config', default='config.ini')
     return parser.parse_args(argv)
 
+def make_provider(settings):
+    """Подготовить источник прямых зависимостей. 3"""
+    if settings['test_mode']:
+        graph = load_test_graph(settings['repository'])
+        if settings['package'] not in graph:
+            raise ValueError('Пакет отсутствует в тестовом графе')
+        return lambda name: graph.get(name, [])
+
+    index = parse_stanzas(download_index(settings['repository']))
+    return apt_provider(
+        index, settings['package'], settings['version']
+    )
+
 def main(argv=None):
-    """Получить и вывести прямые зависимости. 1-2"""
+    """Построить полный граф зависимостей. 1-3"""
     try:
         settings = read_config(parse_cli(argv).config)
-        if settings['test_mode']:
-            raise ValueError(
-                'Тестовый граф поддерживается с этапа 3'
-            )
+        provider = make_provider(settings)
+        root = settings['package']
+        graph = recursive_bfs(root, provider)
 
-        raw = download_index(settings['repository'])
-        index = parse_stanzas(raw)
-
-        name = settings['package']
-        version = settings['version']
-        fields = select_version(index, name, version)
-
-        if fields is None:
-            raise ValueError('Пакет нужной версии не найден')
-
-        dependencies = get_direct(fields)
-        print('Прямые зависимости:', ', '.join(dependencies))
+        for node, children in graph.items():
+            print(f'{node}: {", ".join(children)}')
 
     except (OSError, ValueError) as error:
         print(f'Ошибка: {error}', file=sys.stderr)
