@@ -5,6 +5,7 @@ import sys
 from apt_data import download_index, parse_stanzas
 from config import read_config
 from graph import apt_provider, load_test_graph, recursive_bfs
+from order import loading_order
 
 
 def parse_cli(argv=None):
@@ -29,7 +30,7 @@ def make_provider(settings):
     )
 
 def main(argv=None):
-    """Построить полный граф зависимостей. 1-3"""
+    """Вывести граф и порядок зависимостей. 1-4"""
     try:
         settings = read_config(parse_cli(argv).config)
         provider = make_provider(settings)
@@ -38,6 +39,12 @@ def main(argv=None):
 
         for node, children in graph.items():
             print(f'{node}: {", ".join(children)}')
+
+        sequence, cycles = loading_order(graph, root)
+        print('Оценочный порядок:', ' -> '.join(sequence))
+
+        if cycles:
+            print('Обнаружены циклы:', ', '.join(cycles))
 
     except (OSError, ValueError) as error:
         print(f'Ошибка: {error}', file=sys.stderr)
